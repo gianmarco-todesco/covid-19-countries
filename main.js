@@ -8,7 +8,7 @@ let xScale, yScale
 let countries
 
 let legendSvg
-
+let tooltip
 
 let countryGraphs = []
 let legendItems = []
@@ -90,9 +90,11 @@ function createChart() {
             .tickSize(0).tickValues(logTicks)
             .tickFormat(d3.format(".0f")))
     
-    legendSvg = mainSvg.append('g')
-                .attr('transform',
-                    "translate(100,30)")
+    legendSvg = mainSvg.append('g').attr('transform',"translate(100,30)")
+
+    tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")				
+        .style("opacity", 0);
 }
 
 function getCountryData(country) {
@@ -157,7 +159,11 @@ function addGraph(country) {
                 .attr('cx', d=>xScale(d.date))
                 .attr('cy', d=>yScale(d.Cases))
                 .attr('r', 2)
-                .attr('fill', color)        
+                .attr('fill', color)
+                .on("mouseover", (d) => { tooltip.style("opacity", 0.9); tooltip.html(d.Cases) } )
+	            .on("mousemove", () => tooltip.style("top", (d3.event.pageY-10)+"px").style("left",(d3.event.pageX+10)+"px"))
+	            .on("mouseout", () => tooltip.style("opacity", 0.0))
+        
     })
 
     let legend = addLegend(country, color)
