@@ -111,7 +111,7 @@ function createChart() {
     graphHeight = cDiv.clientHeight
     const margin = {
         top: 10, 
-        right: 30, 
+        right: 60, 
         bottom: 30, 
         left: 60}
     const width = graphWidth - margin.left - margin.right
@@ -155,7 +155,7 @@ function createChart() {
     currentDay.append('line')
         .attr('x0',0).attr('x1',0)
         .attr('y0',0).attr('y1',height)
-        .attr('stroke', 'black')
+        .attr('stroke', 'gray')
     currentDay.attr('visibility', 'hidden')        
     bg.on('mousemove', () => {
         let coords = d3.mouse(bg.node())
@@ -191,8 +191,10 @@ function visualizeDayData(d) {
                 .attr('y', y-15)
                 .attr('width', 50)
                 .attr('height', 20)
+                .attr('rx', 5)
                 .attr('class', 'currentDay')
                 .attr('fill', 'white')
+                .attr('stroke', 'gray')
             currentDay.append('text')
                 .text(point.value)
                 .attr('class', 'currentDay')
