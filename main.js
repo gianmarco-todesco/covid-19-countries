@@ -5,13 +5,19 @@ let svg
 let graphWidth
 let graphHeight
 let xScale, yScale
-let countries
+
+let countryList
+let countryById
+let countryByName
+let selectedCountries = []
 
 let legendSvg
-let tooltip
 
 let countryGraphs = []
 let legendItems = []
+
+let currentDay
+let graphLayer
 
 window.onload = function() {
     createChart()
@@ -19,38 +25,82 @@ window.onload = function() {
 }
 
 function readData() {
-    countries = []
     d3.dsv(';','data.csv', d=>{
         d.date = d3.timeParse("%m/%d/%Y")(d.DateRep)
-        d.country = d['Countries and territories']
+        const countryFld = "Countries and territories"
+        d.country = d[countryFld]
+        delete d[countryFld]
         return d
     })
-    .then(data => {
-        dataSet=data.sort((a,b) => a.date-b.date)
-        countries = dataSet.map(d=>d.country).sort()
-            .filter((item, pos, ary) => {
-            return !pos || item != ary[pos - 1];
-        })
-        addGraph("Italy")
-        updateCountrySelector()
-    })
+    .then(processData)
 }
+
+function processData(data) {
+    dataSet=data.sort((a,b) => a.date-b.date)
+    const lst = dataSet.map(d=>d.country).sort()
+        .filter((item, pos, ary) => { return !pos || item != ary[pos - 1]; })
+    countryList = []
+    countryByName = {}
+    countryById = {}
+    lst.forEach(countryName => {
+        let cases = getCountryData(dataSet, countryName, 'Cases', 10)
+        if(cases.length > 0) {
+            let country = {
+                name: countryName,
+                id: countryList.length,
+                cases: cases,
+                deaths: getCountryData(dataSet, countryName, 'Deaths', 1)
+            }
+            countryList.push(country)
+            countryById[country.id] = country
+            countryByName[country.name] = country
+        }
+    })
+    addGraph(countryByName["Italy"], "cases")
+    updateCountrySelector()
+
+}
+
+function getCountryData(dataSet, country, field, minValue) {
+    let data = dataSet
+        .filter(d=>d.country == country)
+        .filter(d=>!isNaN(d[field])  && d.date > xScale.domain()[0])
+    const check = d => d[field] >= minValue
+    let result = []
+    let i = 0
+    while(i<data.length) {
+        while(i<data.length && !check(data[i])) i++
+        if(i>=data.length) break
+        let j = i
+        let span = []
+        for(;j<data.length && check(data[j]);j++) {
+            const value = parseFloat(data[j][field])
+            span.push({ date : data[j].date, value : value} )
+        }
+        result.push(span)
+        i = j        
+    }
+    return result
+}
+
 
 function updateCountrySelector() {
     let s = document.getElementById('country-selector')
     let option = document.createElement("option");
     option.value = ""
-    option.text = "Add a new country"
+    option.text = "Select a country"
     s.appendChild(option)
-    countries.forEach(country => {
+    countryList.forEach(country => {
         option = document.createElement("option");
-        option.value = option.text = country
+        option.value = country.id
+        option.text = country.name
         s.appendChild(option)
     })
     s.onchange = (e) => {
-        let country = e.target.value
-        if(country != "") {
-            addGraph(country)
+        let countryId = e.target.value
+        if(countryId != "") {
+            addGraph(countryById[countryId], 'cases')
+            s.value = ""
         }
     }
 }
@@ -75,6 +125,14 @@ function createChart() {
             .attr('transform',
                 "translate("+margin.left+","+margin.top+")")
 
+    let bg = svg.append('rect')
+        .attr('class', 'graph-bg')
+        .attr('x',0)
+        .attr('y',0)
+        .attr('width',width)
+        .attr('height',height)
+        .attr('fill', '#eee')
+        
     let logTicks = [10,20,30,50,100,200,500,1000,2000,5000]   
     xScale = d3.scaleTime()
         .domain([new Date("2020-02-01"), new Date("2020-03-21")])
@@ -92,52 +150,106 @@ function createChart() {
     
     legendSvg = mainSvg.append('g').attr('transform',"translate(100,30)")
 
-    tooltip = d3.select("body").append("div")
-        .attr("class", "tooltip")				
-        .style("opacity", 0);
+    graphLayer = svg.append('g')
+    currentDay = svg.append('g')
+    currentDay.append('line')
+        .attr('x0',0).attr('x1',0)
+        .attr('y0',0).attr('y1',height)
+        .attr('stroke', 'black')
+    currentDay.attr('visibility', 'hidden')        
+    bg.on('mousemove', () => {
+        let coords = d3.mouse(bg.node())
+        let x = Math.round( xScale.invert(coords[0]))
+        // console.log(x, new Date(x))
+        visualizeDayData(new Date(x))
+    } )
+    bg.on('mouseout', () => currentDay.attr('visibility', 'hidden')  )
 }
 
-function getCountryData(country) {
-    let data = dataSet
-        .filter(d=>d.country == country)
-        .filter(d=>!isNaN(d.Cases) 
-            && d.date > xScale.domain()[0])
-    const check = d => d.Cases >= 10
-    let result = []
-    let i = 0
-    while(i<data.length) {
-        while(i<data.length && !check(data[i])) i++
-        if(i>=data.length) break
-        let j = i
-        let span = []
-        for(;j<data.length && check(data[j]);j++) {
-            span.push(data[j])
+function visualizeDayData(d) {
+
+    d = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    let x = xScale(d)
+    currentDay
+        .attr('transform','translate('+x+',0)')
+        .attr('visibility', 'visible')
+
+    currentDay.selectAll('.currentDay').remove()
+    selectedCountries.forEach(country => {
+        let point = getClosestPoint(country.cases.flat(), d)
+        if(point != null && Math.abs(d - point.date) < 43200000) {
+            let y = yScale(point.value)
+            currentDay.append('circle')
+                .attr('cx', 0).attr('cy',y).attr('r', 5)
+                .attr('class', 'currentDay')
+                .style('stroke', 'black')
+                .style('fill', '#888')
+                .style('opacity', 0.5)
+
+            currentDay.append('rect')
+                .attr('x', 10)
+                .attr('y', y-15)
+                .attr('width', 50)
+                .attr('height', 20)
+                .attr('class', 'currentDay')
+                .attr('fill', 'white')
+            currentDay.append('text')
+                .text(point.value)
+                .attr('class', 'currentDay')
+                .attr('fill', country.color)
+                .attr('transform', 'translate(20,'+y+')')
+
+
         }
-        result.push(span)
-        i = j        
-    }
-    return result
+
+    })
+
 }
 
-function addGraph(country) {
-    let data = getCountryData(country)
-    if(data.length == 0) return null
+function getClosestPoint(points, date) {
+    if(!points || points.length == 0) return null
+    let n = points.length
+    if(date<=points[0].date) return points[0]
+    else if(date>=points[n-1].date) return points[n-1]
+    let a = 0, b = n-1
+    if(date<=points[a].date || date>=points[b].date) throw "uffa"
+    while(b-a>1) {
+        let c = Math.floor((a+b)/2)
+        if(points[c].date <= date) a=c
+        else b=c
+    }
+    if(date<points[a].date || date>=points[b].date) throw "uffa2"
+    if(date - points[a].date < points[b].date - date) 
+        return points[a]
+    else 
+        return points[b]
+}
 
-    let g = svg.append('g')
+
+function selectColorIndex() {
+    let touched = {}
+    selectedCountries.forEach(country => touched[country.colorIndex] = true)
+    let n = d3.schemeCategory10.length
+    for(let i=0; i+1<n; i++) {
+        if(!touched[i]) return i
+    }
+    return n-1
+}
+
+
+function addGraph(country, field) {
+    let data = country[field]
+    if(!data) return null;
+
+    let g = graphLayer.append('g').attr('class','graph-'+country.id)
 
     // select color
-    let colorIndex = 0    
-    for(let i=0;i<10;i++) {
-
-        if(countryGraphs.filter(g=>g.colorIndex == colorIndex).length == 0)
-            break
-        colorIndex++
-    }
+    let colorIndex = selectColorIndex()
+    country.colorIndex = colorIndex
+    let color = country.color = d3.schemeCategory10[colorIndex]
 
     // add new graph
     countryGraphs.push(g)
-    g.colorIndex = colorIndex
-    let color = d3.schemeCategory10[colorIndex]
 
     data.forEach(span => {
         if(span.length>=2) {
@@ -148,7 +260,7 @@ function addGraph(country) {
                 .attr('stroke-width', 1.5)
                 .attr('d', d3.line()
                     .x(d => xScale(d.date))
-                    .y(d => yScale(d.Cases))
+                    .y(d => yScale(d.value))
                 )
         }
         g.append('g')
@@ -157,39 +269,97 @@ function addGraph(country) {
             .enter()
             .append('circle')
                 .attr('cx', d=>xScale(d.date))
-                .attr('cy', d=>yScale(d.Cases))
+                .attr('cy', d=>yScale(d.value))
                 .attr('r', 2)
-                .attr('fill', color)
-                .on("mouseover", (d) => { tooltip.style("opacity", 0.9); tooltip.html(d.Cases) } )
-	            .on("mousemove", () => tooltip.style("top", (d3.event.pageY-10)+"px").style("left",(d3.event.pageX+10)+"px"))
-	            .on("mouseout", () => tooltip.style("opacity", 0.0))
-        
+                .attr('fill', color)        
     })
-
-    let legend = addLegend(country, color)
+    selectedCountries.push(country)
+    updateLegend()
     return g
 
 }
 
-function addLegend(country, color) {
+function addLegend(country) {
+    let color = country.color
     let index = legendItems.length
     let g = legendSvg.append('g')
-    g.attr('transform', "translate(0,"+ index*20 +")")
+        .attr('transform', "translate(0,"+ index*20 +")")
+        .attr('class','legend-'+country.id)
+
     legendItems.push(g)
 
     g.append('circle')
         .attr('cx',0)
-        .attr('cy',0)
+        .attr('cy',-2)
         .attr('r',6)
         .style("fill", color)
     
     g.append("text")
         .attr("x", 10).attr("y", 0)
-        .text(country)
+        .text(country.name)
         .style("font-size", "15px")
         .attr("alignment-baseline","middle")
     
+    g.append('text').text('(x)').attr('x',50).style('cursor','pointer').on('click', ()=>removeCountry(country))
 
     return 10
 
+}
+
+function updateLegend() {
+    let g = legendSvg.selectAll('g').data(selectedCountries)
+    let newg = g.enter().append('g').attr('class', d=>'legend legend-'+d.id)
+    console.log("-->", g.size(), newg.size())
+    
+    newg.append('text')
+        .attr("x", 10)
+        .attr("y", 0)
+        .attr('class', 'name')
+
+    newg.append('circle')
+        .attr('cx',0)
+        .attr('cy',-5)
+        .attr('r',6)
+
+    newg.append('text')
+        .text('(x)')
+        .attr('class', 'del-btn')
+        .attr('x',-30)
+        .style('cursor','pointer')
+        .on('click', (d,i) => removeCountry(selectedCountries[i]))
+    g.exit().remove()
+
+
+    g.merge(newg)
+        .attr('transform', (d,i)=>"translate(0,"+ i*20 +")")
+        .attr('class', d=>'legend legend-'+d.id)
+
+    // appearently there is a problem with d3 data binding and child element
+    // there should be a better way to do this! :(
+    legendSvg.selectAll('text.name').data(selectedCountries).text(d=>d.name)
+    legendSvg.selectAll('circle').data(selectedCountries).attr('fill', d=>d.color)
+
+    
+
+    /*
+
+    let newg = g.enter()
+    newg.append('g')
+
+    
+    g.exit().remove()
+
+    g.attr('class', d=>'legend legend-'+d.id)
+        .attr('transform', (d,i)=>"translate(0,"+ i*20 +")")
+    g.selectAll('text').text(d => d.name)
+    g.selectAll('circle').style("fill", d=>d.color)
+    */
+}
+
+function removeCountry(country) {
+    console.log("remove", country)
+    d3.select('.graph-'+country.id).remove()
+    let i = selectedCountries.map(d=>d.id).indexOf(country.id)
+    if(i>=0) selectedCountries.splice(i,1)
+    updateLegend() 
 }
