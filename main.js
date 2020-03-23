@@ -135,7 +135,7 @@ function createChart() {
         
     let logTicks = [10,20,30,50,100,200,500,1000,2000,5000]   
     xScale = d3.scaleTime()
-        .domain([new Date("2020-02-01"), new Date("2020-03-21")])
+        .domain([new Date("2020-02-01"), new Date("2020-03-24")])
         .range([0, width])
     svg.append('g')
         .attr('transform', 'translate(0,'+height+')')
