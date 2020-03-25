@@ -25,8 +25,8 @@ window.onload = function() {
 }
 
 function readData() {
-    d3.dsv(';','data.csv', d=>{
-        d.date = d3.timeParse("%m/%d/%Y")(d.DateRep)
+    d3.dsv(',','data.csv', d=>{
+        d.date = d3.timeParse("%d/%m/%Y")(d.DateRep)
         const countryFld = "Countries and territories"
         d.country = d[countryFld]
         delete d[countryFld]
@@ -133,15 +133,15 @@ function createChart() {
         .attr('height',height)
         .attr('fill', '#eee')
         
-    let logTicks = [10,20,30,50,100,200,500,1000,2000,5000]   
+    let logTicks = [10,20,30,50,100,200,500,1000,2000,5000,10000,20000]   
     xScale = d3.scaleTime()
-        .domain([new Date("2020-02-01"), new Date("2020-03-24")])
+        .domain([new Date("2020-02-15"), new Date("2020-03-27")])
         .range([0, width])
     svg.append('g')
         .attr('transform', 'translate(0,'+height+')')
         .call(d3.axisBottom(xScale))
     yScale = d3.scaleLog()
-        .domain([10,10000])
+        .domain([10,50000])
         .range([height, 0])
     svg.append('g')
         .call(d3.axisLeft(yScale)
