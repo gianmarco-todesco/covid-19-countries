@@ -26,8 +26,8 @@ window.onload = function() {
 
 function readData() {
     d3.dsv(',','data.csv', d=>{
-        d.date = d3.timeParse("%d/%m/%Y")(d.DateRep)
-        const countryFld = "Countries and territories"
+        d.date = d3.timeParse("%d-%m-%Y")(d.dateRep)
+        const countryFld = "countriesAndTerritories"
         d.country = d[countryFld]
         delete d[countryFld]
         return d
@@ -43,13 +43,13 @@ function processData(data) {
     countryByName = {}
     countryById = {}
     lst.forEach(countryName => {
-        let cases = getCountryData(dataSet, countryName, 'Cases', 10)
+        let cases = getCountryData(dataSet, countryName, 'cases', 10)
         if(cases.length > 0) {
             let country = {
                 name: countryName,
                 id: countryList.length,
                 cases: cases,
-                deaths: getCountryData(dataSet, countryName, 'Deaths', 1)
+                deaths: getCountryData(dataSet, countryName, 'deaths', 1)
             }
             countryList.push(country)
             countryById[country.id] = country
@@ -205,6 +205,13 @@ function visualizeDayData(d) {
         }
 
     })
+    currentDay.append('text')
+                .text(d3.timeFormat("%d %b")(d))
+                .style("text-anchor", "middle")
+                .style("font-size", "10px")                
+                .attr('class', 'currentDay')
+                .attr('fill', 'black')
+                .attr('transform', 'translate(0,-1)')
 
 }
 
